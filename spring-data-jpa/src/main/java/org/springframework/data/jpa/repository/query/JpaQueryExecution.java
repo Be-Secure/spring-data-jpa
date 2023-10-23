@@ -34,6 +34,7 @@ import org.springframework.data.domain.ScrollPosition;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Window;
 import org.springframework.data.jpa.provider.PersistenceProvider;
 import org.springframework.data.repository.core.support.SurroundingTransactionDetectorMethodInterceptor;
 import org.springframework.data.support.PageableExecutionUtils;
@@ -154,7 +155,8 @@ public abstract class JpaQueryExecution {
 			ScrollPosition scrollPosition = accessor.getScrollPosition();
 			Query scrollQuery = query.createQuery(accessor);
 
-			return delegate.scroll(scrollQuery, sort.and(accessor.getSort()), scrollPosition);
+			Window<?> scroll = delegate.scroll(scrollQuery, sort.and(accessor.getSort()), scrollPosition);
+			return scroll;
 		}
 	}
 

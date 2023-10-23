@@ -25,7 +25,6 @@ import jakarta.persistence.metamodel.Metamodel;
 import java.lang.reflect.Method;
 import java.util.List;
 
-import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -97,9 +96,9 @@ class JpaQueryLookupStrategyUnitTests {
 		Throwable reference = new RuntimeException();
 		when(em.createQuery(anyString())).thenThrow(reference);
 
-		assertThatExceptionOfType(IllegalArgumentException.class)
-				.isThrownBy(() -> strategy.resolveQuery(method, metadata, projectionFactory, namedQueries))
-				.withCause(reference);
+		assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() -> {
+			strategy.resolveQuery(method, metadata, projectionFactory, namedQueries);
+		}).withCause(reference);
 	}
 
 	@Test // DATAJPA-554
@@ -132,10 +131,10 @@ class JpaQueryLookupStrategyUnitTests {
 		RepositoryMetadata metadata = new DefaultRepositoryMetadata(UserRepository.class);
 
 		RepositoryQuery repositoryQuery = strategy.resolveQuery(method, metadata, projectionFactory, namedQueries);
-		assertThat(repositoryQuery).isInstanceOf(SimpleJpaQuery.class);
-		SimpleJpaQuery query = (SimpleJpaQuery) repositoryQuery;
-		assertThat(query.getQuery().getQueryString()).isEqualTo("select foo from Foo foo");
-		assertThat(query.getCountQuery().getQueryString()).isEqualTo("select count(foo) from Foo foo");
+		assertThat(repositoryQuery).isInstanceOf(AnnotationBasedQueryContext.class);
+		AnnotationBasedQueryContext query = (AnnotationBasedQueryContext) repositoryQuery;
+		assertThat(query.getQueryString()).isEqualTo("select foo from Foo foo");
+		assertThat(query.getCountQueryString()).isEqualTo("select count(foo) from Foo foo");
 	}
 
 	@Test // GH-2217
@@ -152,9 +151,9 @@ class JpaQueryLookupStrategyUnitTests {
 		RepositoryMetadata metadata = new DefaultRepositoryMetadata(UserRepository.class);
 
 		RepositoryQuery repositoryQuery = strategy.resolveQuery(method, metadata, projectionFactory, namedQueries);
-		assertThat(repositoryQuery).isInstanceOf(SimpleJpaQuery.class);
-		SimpleJpaQuery query = (SimpleJpaQuery) repositoryQuery;
-		assertThat(query.getCountQuery().getQueryString()).isEqualTo("select count(foo) from Foo foo");
+		assertThat(repositoryQuery).isInstanceOf(AnnotationBasedQueryContext.class);
+		AnnotationBasedQueryContext query = (AnnotationBasedQueryContext) repositoryQuery;
+		assertThat(query.getCountQueryString()).isEqualTo("select count(foo) from Foo foo");
 	}
 
 	@Test // GH-2319
@@ -167,7 +166,7 @@ class JpaQueryLookupStrategyUnitTests {
 
 		RepositoryQuery repositoryQuery = strategy.resolveQuery(method, metadata, projectionFactory, namedQueries);
 
-		assertThat(repositoryQuery).isInstanceOf(AbstractStringBasedJpaQuery.class);
+		assertThat(repositoryQuery).isInstanceOf(AnnotationBasedQueryContext.class);
 	}
 
 	@Test // GH-2018

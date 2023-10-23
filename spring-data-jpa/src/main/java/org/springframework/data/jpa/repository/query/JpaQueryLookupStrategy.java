@@ -121,7 +121,13 @@ public final class JpaQueryLookupStrategy {
 		@Override
 		protected RepositoryQuery resolveQuery(JpaQueryMethod method, QueryRewriter queryRewriter, EntityManager em,
 				NamedQueries namedQueries) {
-			return new PartTreeJpaQuery(method, em, escape);
+
+			RepositoryQuery classicFinder = new PartTreeJpaQuery(method, em, escape);
+			CustomFinderQueryContext customFinder = new CustomFinderQueryContext(method, em, escape);
+
+			boolean classic = false;
+
+			return classic ? classicFinder : customFinder;
 		}
 	}
 

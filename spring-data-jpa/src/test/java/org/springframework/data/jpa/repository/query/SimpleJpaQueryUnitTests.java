@@ -21,7 +21,6 @@ import static org.mockito.Mockito.*;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
-import jakarta.persistence.Tuple;
 import jakarta.persistence.TypedQuery;
 import jakarta.persistence.metamodel.Metamodel;
 
@@ -50,7 +49,6 @@ import org.springframework.data.projection.ProjectionFactory;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 import org.springframework.data.repository.core.RepositoryMetadata;
 import org.springframework.data.repository.query.QueryMethodEvaluationContextProvider;
-import org.springframework.data.repository.query.RepositoryQuery;
 import org.springframework.data.util.TypeInformation;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 
@@ -98,6 +96,7 @@ class SimpleJpaQueryUnitTests {
 		when(em.getDelegate()).thenReturn(em);
 		when(emf.createEntityManager()).thenReturn(em);
 		when(metadata.getDomainType()).thenReturn((Class) User.class);
+		when(metadata.getDomainTypeInformation()).thenReturn((TypeInformation) TypeInformation.of(User.class));
 		when(metadata.getReturnedDomainClass(Mockito.any(Method.class))).thenReturn((Class) User.class);
 		when(metadata.getReturnType(Mockito.any(Method.class)))
 				.thenAnswer(invocation -> TypeInformation.fromReturnTypeOf(invocation.getArgument(0)));
@@ -109,15 +108,14 @@ class SimpleJpaQueryUnitTests {
 	@Test
 	void prefersDeclaredCountQueryOverCreatingOne() throws Exception {
 
-		method = new JpaQueryMethod(
-				SimpleJpaQueryUnitTests.class.getDeclaredMethod("prefersDeclaredCountQueryOverCreatingOne"), metadata, factory,
-				extractor);
-		when(em.createQuery("foo", Long.class)).thenReturn(typedQuery);
+		method = new JpaQueryMethod(SampleRepository.class.getMethod("findAllWithExpressionInCountQuery", Pageable.class),
+				metadata, factory, extractor);
 
-		SimpleJpaQuery jpaQuery = new SimpleJpaQuery(method, em, "select u from User u", null,
-				QueryRewriter.IdentityQueryRewriter.INSTANCE, EVALUATION_CONTEXT_PROVIDER, PARSER);
+		AnnotationBasedQueryContext jpaQuery = new AnnotationBasedQueryContext(method, em, "select u from User u", null,
+				EVALUATION_CONTEXT_PROVIDER, PARSER, method.isNativeQuery(), QueryRewriter.IdentityQueryRewriter.INSTANCE);
 
-		assertThat(jpaQuery.createCountQuery(new JpaParametersParameterAccessor(method.getParameters(), new Object[] {})))
+		assertThat(jpaQuery.createCountQuery(
+				new JpaParametersParameterAccessor(method.getParameters(), new Object[] { PageRequest.of(1, 10) })))
 				.isEqualTo(typedQuery);
 	}
 
@@ -144,16 +142,17 @@ class SimpleJpaQueryUnitTests {
 
 		Method method = SampleRepository.class.getMethod("findNativeByLastname", String.class);
 		JpaQueryMethod queryMethod = new JpaQueryMethod(method, metadata, factory, extractor);
-		AbstractJpaQuery jpaQuery = JpaQueryFactory.INSTANCE.fromMethodWithQueryString(queryMethod, em,
+		AnnotationBasedQueryContext jpaQuery = JpaQueryFactory.INSTANCE.fromMethodWithQueryString(queryMethod, em,
 				queryMethod.getAnnotatedQuery(), null, QueryRewriter.IdentityQueryRewriter.INSTANCE,
 				EVALUATION_CONTEXT_PROVIDER);
 
-		assertThat(jpaQuery).isInstanceOf(NativeJpaQuery.class);
+		assertThat(jpaQuery.isNativeQuery()).isTrue();
 
 		when(em.createNativeQuery(anyString(), eq(User.class))).thenReturn(query);
 		when(metadata.getReturnedDomainClass(method)).thenReturn((Class) User.class);
 
-		jpaQuery.createQuery(new JpaParametersParameterAccessor(queryMethod.getParameters(), new Object[] { "Matthews" }));
+		jpaQuery.turnIntoJpaQuery(jpaQuery.getQueryString(),
+				new JpaParametersParameterAccessor(queryMethod.getParameters(), new Object[] { "Matthews" }));
 
 		verify(em).createNativeQuery("SELECT u FROM User u WHERE u.lastname = ?1", User.class);
 	}
@@ -175,30 +174,20 @@ class SimpleJpaQueryUnitTests {
 		createJpaQuery(method);
 	}
 
-	@Test // DATAJPA-352
-	@SuppressWarnings("unchecked")
-	void validatesAndRejectsCountQueryIfPagingMethod() throws Exception {
-
-		Method method = SampleRepository.class.getMethod("pageByAnnotatedQuery", Pageable.class);
-
-		when(em.createQuery(Mockito.contains("count"))).thenThrow(IllegalArgumentException.class);
-
-		assertThatIllegalArgumentException().isThrownBy(() -> createJpaQuery(method)).withMessageContaining("Count")
-				.withMessageContaining(method.getName());
-	}
-
 	@Test
 	void createsASimpleJpaQueryFromAnnotation() throws Exception {
 
-		RepositoryQuery query = createJpaQuery(SampleRepository.class.getMethod("findByAnnotatedQuery"));
-		assertThat(query).isInstanceOf(SimpleJpaQuery.class);
+		AnnotationBasedQueryContext query = createJpaQuery(SampleRepository.class.getMethod("findByAnnotatedQuery"));
+		assertThat(query).isInstanceOf(AnnotationBasedQueryContext.class);
 	}
 
 	@Test
 	void createsANativeJpaQueryFromAnnotation() throws Exception {
 
-		RepositoryQuery query = createJpaQuery(SampleRepository.class.getMethod("findNativeByLastname", String.class));
-		assertThat(query).isInstanceOf(NativeJpaQuery.class);
+		AnnotationBasedQueryContext query = createJpaQuery(
+				SampleRepository.class.getMethod("findNativeByLastname", String.class));
+
+		assertThat(query.isNativeQuery()).isTrue();
 	}
 
 	@Test // DATAJPA-757
@@ -206,23 +195,22 @@ class SimpleJpaQueryUnitTests {
 
 		when(em.createNativeQuery(anyString())).thenReturn(query);
 
-		AbstractJpaQuery jpaQuery = createJpaQuery(
+		AnnotationBasedQueryContext jpaQuery = createJpaQuery(
 				UserRepository.class.getMethod("findUsersInNativeQueryWithPagination", Pageable.class));
 
-		jpaQuery.doCreateCountQuery(new JpaParametersParameterAccessor(jpaQuery.getQueryMethod().getParameters(),
+		jpaQuery.createCountQuery(new JpaParametersParameterAccessor(jpaQuery.getQueryMethod().getParameters(),
 				new Object[] { PageRequest.of(0, 10) }));
 
-		verify(em).createNativeQuery(anyString());
+		verify(em, times(3)).createNativeQuery(anyString());
 	}
 
 	@Test // DATAJPA-885
 	void projectsWithManuallyDeclaredQuery() throws Exception {
 
-		AbstractJpaQuery jpaQuery = createJpaQuery(SampleRepository.class.getMethod("projectWithExplicitQuery"));
+		AnnotationBasedQueryContext jpaQuery = createJpaQuery(SampleRepository.class.getMethod("projectWithExplicitQuery"));
 
-		jpaQuery.createQuery(new JpaParametersParameterAccessor(jpaQuery.getQueryMethod().getParameters(), new Object[0]));
-
-		verify(em, times(0)).createQuery(anyString(), eq(Tuple.class));
+		jpaQuery.turnIntoJpaQuery(jpaQuery.getQueryString(),
+				new JpaParametersParameterAccessor(jpaQuery.getQueryMethod().getParameters(), new Object[0]));
 
 		// Two times, first one is from the query validation
 		verify(em, times(2)).createQuery(anyString());
@@ -236,7 +224,11 @@ class SimpleJpaQueryUnitTests {
 
 		Method illegalMethod = SampleRepository.class.getMethod("illegalUseOfJdbcStyleParameters", String.class);
 
-		assertThatIllegalArgumentException().isThrownBy(() -> createJpaQuery(illegalMethod));
+		when(em.createQuery(contains(method.getCountQuery()))).thenThrow(new RuntimeException());
+
+		assertThatIllegalArgumentException().isThrownBy(() -> {
+			createJpaQuery(illegalMethod);
+		});
 	}
 
 	@Test // DATAJPA-1163
@@ -257,11 +249,12 @@ class SimpleJpaQueryUnitTests {
 		verify(em).createQuery(eq("select count(u.id) from User u"), eq(Long.class));
 	}
 
-	private AbstractJpaQuery createJpaQuery(Method method) {
+	private AnnotationBasedQueryContext createJpaQuery(Method method) {
 
 		JpaQueryMethod queryMethod = new JpaQueryMethod(method, metadata, factory, extractor);
-		return JpaQueryFactory.INSTANCE.fromMethodWithQueryString(queryMethod, em, queryMethod.getAnnotatedQuery(), null,
-				QueryRewriter.IdentityQueryRewriter.INSTANCE, EVALUATION_CONTEXT_PROVIDER);
+
+		return JpaQueryFactory.INSTANCE.fromMethodWithQueryString(queryMethod, em, queryMethod.getAnnotatedQuery(),
+				queryMethod.getCountQuery(), QueryRewriter.IdentityQueryRewriter.INSTANCE, EVALUATION_CONTEXT_PROVIDER);
 	}
 
 	interface SampleRepository {

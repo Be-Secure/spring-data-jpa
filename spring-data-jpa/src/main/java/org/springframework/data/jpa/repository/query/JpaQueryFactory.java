@@ -46,7 +46,7 @@ enum JpaQueryFactory {
 	 * @param evaluationContextProvider
 	 * @return
 	 */
-	AbstractJpaQuery fromMethodWithQueryString(JpaQueryMethod method, EntityManager em, String queryString,
+	AnnotationBasedQueryContext fromMethodWithQueryString(JpaQueryMethod method, EntityManager em, String queryString,
 			@Nullable String countQueryString, QueryRewriter queryRewriter,
 			QueryMethodEvaluationContextProvider evaluationContextProvider) {
 
@@ -54,11 +54,14 @@ enum JpaQueryFactory {
 			throw QueryCreationException.create(method, "Scroll queries are not supported using String-based queries");
 		}
 
-		return method.isNativeQuery()
-				? new NativeJpaQuery(method, em, queryString, countQueryString, queryRewriter, evaluationContextProvider,
-						PARSER)
-				: new SimpleJpaQuery(method, em, queryString, countQueryString, queryRewriter, evaluationContextProvider,
-						PARSER);
+		// RepositoryQuery classicQuery = method.isNativeQuery() //
+		// ? new NativeJpaQuery(method, em, queryString, countQueryString, queryRewriter, evaluationContextProvider,
+		// PARSER) //
+		// : new SimpleJpaQuery(method, em, queryString, countQueryString, queryRewriter, evaluationContextProvider,
+		// PARSER);
+
+		return new AnnotationBasedQueryContext(method, em, queryString, countQueryString,
+				evaluationContextProvider, PARSER, method.isNativeQuery(), queryRewriter);
 	}
 
 	/**
@@ -68,12 +71,13 @@ enum JpaQueryFactory {
 	 * @param em must not be {@literal null}.
 	 * @return
 	 */
-	public StoredProcedureJpaQuery fromProcedureAnnotation(JpaQueryMethod method, EntityManager em) {
+	RepositoryQuery fromProcedureAnnotation(JpaQueryMethod method, EntityManager em) {
 
 		if (method.isScrollQuery()) {
 			throw QueryCreationException.create(method, "Scroll queries are not supported using stored procedures");
 		}
 
-		return new StoredProcedureJpaQuery(method, em);
+		return new StoredProcedureQueryContext(method, em);
+		// return new StoredProcedureJpaQuery(method, em);
 	}
 }
