@@ -1,3 +1,18 @@
+/*
+ * Copyright 2023 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.springframework.data.jpa.repository.query;
 
 import static org.springframework.data.jpa.repository.query.QueryUtils.*;
@@ -43,6 +58,11 @@ import org.springframework.data.util.Streamable;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
+/**
+ * An {@link AbstractJpaQueryContext} used to handle custom finders.
+ *
+ * @author Greg Turnquist
+ */
 class CustomFinderQueryContext extends AbstractJpaQueryContext {
 
 	private static final Log LOG = LogFactory.getLog(CustomFinderQueryContext.class);
@@ -94,7 +114,7 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 	}
 
 	@Override
-	protected String createQuery(JpaParametersParameterAccessor accessor) {
+	protected ContextualQuery createQuery(JpaParametersParameterAccessor accessor) {
 
 		ParameterMetadataContextProvider provider;
 
@@ -115,7 +135,7 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 
 		System.out.println(query);
 
-		return query;
+		return new ContextualQuery.StringQuery(query);
 	}
 
 	Sort getDynamicSort(JpaParametersParameterAccessor accessor) {
@@ -150,7 +170,7 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 	}
 
 	@Override
-	protected Query turnIntoJpaQuery(String query, JpaParametersParameterAccessor accessor) {
+	protected Query turnIntoJpaQuery(ContextualQuery query, JpaParametersParameterAccessor accessor) {
 
 		ReturnedType returnedType = getQueryMethod().getResultProcessor().withDynamicProjection(accessor).getReturnedType();
 
@@ -161,7 +181,7 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 			Class<?> typeToRead = returnedType.getReturnedType();
 
 			if (typeToRead.isInterface()) {
-				jpaQuery = getEntityManager().createQuery(query, typeToRead);
+				jpaQuery = getEntityManager().createQuery(query.getQuery(), typeToRead);
 			} else {
 
 				String selections = returnedType.getInputProperties().stream() //
@@ -169,7 +189,7 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 						.map(path -> alias(returnedType) + "." + path.toDotPath() + " as " + path.toDotPath())//
 						.collect(Collectors.joining(","));
 
-				String classBasedDtoQuery = query.replace("select " + alias(returnedType.getDomainType()),
+				String classBasedDtoQuery = query.getQuery().replace("select " + alias(returnedType.getDomainType()),
 						"select " + selections);
 
 				LOG.debug(getQueryMethod().getName() + ": Switching to classbased DTO query " + classBasedDtoQuery);
@@ -187,7 +207,8 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 				SingularAttribute<?, ?> id = model.getId(model.getIdType().getJavaType());
 
 				String selections = String.format("%s.%s as %s", alias(returnedType), id.getName(), id.getName());
-				String existsQuery = query.replace("select " + alias(returnedType.getDomainType()), "select " + selections);
+				String existsQuery = query.getQuery().replace("select " + alias(returnedType.getDomainType()),
+						"select " + selections);
 
 				LOG.debug(getQueryMethod().getName() + ": Switching to " + existsQuery);
 				System.out.println("Switching to " + existsQuery);
@@ -199,7 +220,8 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 						.map(id -> String.format("%s.%s as %s", alias(returnedType), id.getName(), id.getName())) //
 						.collect(Collectors.joining(","));
 
-				String existsQuery = query.replace("select " + alias(returnedType.getDomainType()), "select " + selections);
+				String existsQuery = query.getQuery().replace("select " + alias(returnedType.getDomainType()),
+						"select " + selections);
 
 				LOG.debug(getQueryMethod().getName() + ": Switching to " + existsQuery);
 				System.out.println("Switching to " + existsQuery);
@@ -208,7 +230,7 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 			}
 
 		} else {
-			jpaQuery = getEntityManager().createQuery(query);
+			jpaQuery = getEntityManager().createQuery(query.getQuery());
 		}
 
 		return jpaQuery;
@@ -424,9 +446,9 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 
 				return expression.appendCriteria("." + segment);
 
-//				return alias.isEmpty() //
-//						? expression.criteria(segment) //
-//						: expression.appendCriteria(alias + "." + segment);
+				// return alias.isEmpty() //
+				// ? expression.criteria(segment) //
+				// : expression.appendCriteria(alias + "." + segment);
 			}
 
 			JoinType joinType = requiresOuterJoin ? JoinType.LEFT : JoinType.INNER;

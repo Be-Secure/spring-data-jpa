@@ -133,7 +133,7 @@ class JpaQueryLookupStrategyUnitTests {
 		RepositoryQuery repositoryQuery = strategy.resolveQuery(method, metadata, projectionFactory, namedQueries);
 		assertThat(repositoryQuery).isInstanceOf(AnnotationBasedQueryContext.class);
 		AnnotationBasedQueryContext query = (AnnotationBasedQueryContext) repositoryQuery;
-		assertThat(query.getQueryString()).isEqualTo("select foo from Foo foo");
+		assertThat(query.getQueryString().getQuery()).isEqualTo("select foo from Foo foo");
 		assertThat(query.getCountQueryString()).isEqualTo("select count(foo) from Foo foo");
 	}
 

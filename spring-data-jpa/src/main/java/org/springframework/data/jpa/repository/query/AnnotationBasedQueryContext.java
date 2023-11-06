@@ -1,3 +1,18 @@
+/*
+ * Copyright 2023 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.springframework.data.jpa.repository.query;
 
 import static org.springframework.data.jpa.repository.query.ExpressionBasedStringQuery.*;
@@ -22,6 +37,12 @@ import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.lang.Nullable;
 
+/**
+ * An {@link AbstractJpaQueryContext} used to handle @{@link org.springframework.data.jpa.repository.Query}-based
+ * queries.
+ *
+ * @author Greg Turnquist
+ */
 class AnnotationBasedQueryContext extends AbstractJpaQueryContext {
 
 	private final String originalQueryString;
@@ -57,8 +78,8 @@ class AnnotationBasedQueryContext extends AbstractJpaQueryContext {
 		validateQueries();
 	}
 
-	public String getQueryString() {
-		return queryString;
+	public ContextualQuery getQueryString() {
+		return new ContextualQuery.StringQuery(queryString);
 	}
 
 	public String getCountQueryString() {
@@ -73,28 +94,30 @@ class AnnotationBasedQueryContext extends AbstractJpaQueryContext {
 	}
 
 	@Override
-	protected String createQuery(JpaParametersParameterAccessor accessor) {
-		return queryString;
+	protected ContextualQuery createQuery(JpaParametersParameterAccessor accessor) {
+		return new ContextualQuery.StringQuery(queryString);
 	}
 
 	@Override
-	protected String postProcessQuery(String query, JpaParametersParameterAccessor accessor) {
+	protected ContextualQuery postProcessQuery(ContextualQuery query, JpaParametersParameterAccessor accessor) {
 
-		DeclaredQuery declaredQuery = DeclaredQuery.of(query, nativeQuery);
+		DeclaredQuery declaredQuery = DeclaredQuery.of(query.getQuery(), nativeQuery);
 
-		return QueryEnhancerFactory.forQuery(declaredQuery) //
+		String queryString = QueryEnhancerFactory.forQuery(declaredQuery) //
 				.applySorting(accessor.getSort(), declaredQuery.getAlias());
+
+		return new ContextualQuery.StringQuery(queryString);
 	}
 
 	@Override
-	protected Query turnIntoJpaQuery(String query, JpaParametersParameterAccessor accessor) {
+	protected Query turnIntoJpaQuery(ContextualQuery query, JpaParametersParameterAccessor accessor) {
 
 		ResultProcessor processor = getQueryMethod().getResultProcessor().withDynamicProjection(accessor);
 
 		ReturnedType returnedType = processor.getReturnedType();
 		Class<?> typeToRead = getTypeToRead(returnedType);
 
-		String potentiallyRewrittenQuery = potentiallyRewriteQuery(query, accessor);
+		String potentiallyRewrittenQuery = potentiallyRewriteQuery(query.getQuery(), accessor);
 
 		if (typeToRead == null) {
 			return nativeQuery //
@@ -249,5 +272,4 @@ class AnnotationBasedQueryContext extends AbstractJpaQueryContext {
 				? queryRewriter.rewrite(originalQuery, pageable) //
 				: queryRewriter.rewrite(originalQuery, sort);
 	}
-
 }

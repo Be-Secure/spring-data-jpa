@@ -1,3 +1,18 @@
+/*
+ * Copyright 2023 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.springframework.data.jpa.repository.query;
 
 import jakarta.persistence.EntityManager;
@@ -114,9 +129,9 @@ abstract class AbstractJpaQueryContext implements QueryContext {
 
 		JpaParametersParameterAccessor accessor = obtainParameterAccessor(parameters);
 
-		String initialQuery = createQuery(accessor);
+		ContextualQuery initialQuery = createQuery(accessor);
 
-		String processedQuery = postProcessQuery(initialQuery, accessor);
+		ContextualQuery processedQuery = postProcessQuery(initialQuery, accessor);
 
 		Query jpaQuery = turnIntoJpaQuery(processedQuery, accessor);
 
@@ -143,7 +158,7 @@ abstract class AbstractJpaQueryContext implements QueryContext {
 	 *
 	 * @return
 	 */
-	protected abstract String createQuery(JpaParametersParameterAccessor accessor);
+	protected abstract ContextualQuery createQuery(JpaParametersParameterAccessor accessor);
 
 	/**
 	 * Taking the original query, apply any textual transformations needed to make the query runnable.
@@ -151,7 +166,7 @@ abstract class AbstractJpaQueryContext implements QueryContext {
 	 * @param query
 	 * @return modified query
 	 */
-	protected String postProcessQuery(String query, JpaParametersParameterAccessor accessor) {
+	protected ContextualQuery postProcessQuery(ContextualQuery query, JpaParametersParameterAccessor accessor) {
 		return query;
 	}
 
@@ -161,11 +176,11 @@ abstract class AbstractJpaQueryContext implements QueryContext {
 	 * @param query
 	 * @return
 	 */
-	protected Query turnIntoJpaQuery(String query, JpaParametersParameterAccessor accessor) {
+	protected Query turnIntoJpaQuery(ContextualQuery query, JpaParametersParameterAccessor accessor) {
 
 		Class<?> typeToRead = getTypeToRead(method.getResultProcessor().getReturnedType());
 
-		return entityManager.createQuery(query, typeToRead);
+		return entityManager.createQuery(query.getQuery(), typeToRead);
 	}
 
 	/**
@@ -303,6 +318,8 @@ abstract class AbstractJpaQueryContext implements QueryContext {
 
 	/**
 	 * Base class that defines how queries are executed with JPA.
+	 * 
+	 * @author Greg Turnquist
 	 */
 	abstract class JpaQueryContextExecutor {
 
@@ -574,6 +591,9 @@ abstract class AbstractJpaQueryContext implements QueryContext {
 		}
 	}
 
+	/**
+	 * Execute a JPA query for a repository method using the Scroll API.
+	 */
 	class ScrollExecutor extends JpaQueryContextExecutor {
 		private final Sort sort;
 		private final ScrollDelegate<?> delegate;
@@ -595,6 +615,9 @@ abstract class AbstractJpaQueryContext implements QueryContext {
 		}
 	}
 
+	/**
+	 * Execute a JPA delete.
+	 */
 	class DeleteExecutor extends JpaQueryContextExecutor {
 		public DeleteExecutor(AbstractJpaQueryContext queryContext) {
 			super(queryContext);
@@ -613,6 +636,9 @@ abstract class AbstractJpaQueryContext implements QueryContext {
 		}
 	}
 
+	/**
+	 * Execute a JPA exists operation.
+	 */
 	class ExistsExecutor extends JpaQueryContextExecutor {
 
 		public ExistsExecutor(AbstractJpaQueryContext queryContext) {
