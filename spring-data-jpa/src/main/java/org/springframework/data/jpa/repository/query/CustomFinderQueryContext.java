@@ -135,7 +135,7 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 
 		System.out.println(query);
 
-		return new ContextualQuery.StringQuery(query);
+		return ContextualQuery.of(query);
 	}
 
 	Sort getDynamicSort(JpaParametersParameterAccessor accessor) {

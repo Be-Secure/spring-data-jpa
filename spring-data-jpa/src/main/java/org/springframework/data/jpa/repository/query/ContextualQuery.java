@@ -15,32 +15,44 @@
  */
 package org.springframework.data.jpa.repository.query;
 
-import org.springframework.data.domain.Example;
-
 /**
  * Represents a query before it's executed by the entity manager.
  *
  * @author Greg Turnquist
  */
-interface ContextualQuery {
+abstract class ContextualQuery {
 
 	/**
-	 * Extract the string-version of the query.
+	 * Create a new {@link ContextualQuery} using a string-based query.
+	 * 
+	 * @param query
+	 * @return
 	 */
-	String getQuery();
-
-	/**
-	 * Represents a pure string-based query.
-	 */
-	record StringQuery(String query) implements ContextualQuery {
-
-		@Override
-		public String getQuery() {
-			return query;
-		}
+	static ContextualQuery of(String query) {
+		return new StringQuery(query);
 	}
 
-	record ExampleQuery(Example<?> example) {
+	/**
+	 * Extract the string version of the query.
+	 */
+	abstract String getQuery();
 
+	public ContextualQuery alterQuery(String queryString) {
+		return new StringQuery(queryString);
+	}
+
+	/**
+	 * String-based variant of a {@link ContextualQuery}.
+	 */
+	private static final class StringQuery extends ContextualQuery {
+		private final String query;
+
+		StringQuery(String query) {
+			this.query = query;
+		}
+
+		String getQuery() {
+			return query;
+		}
 	}
 }

@@ -79,7 +79,7 @@ class AnnotationBasedQueryContext extends AbstractJpaQueryContext {
 	}
 
 	public ContextualQuery getQueryString() {
-		return new ContextualQuery.StringQuery(queryString);
+		return ContextualQuery.of(this.queryString);
 	}
 
 	public String getCountQueryString() {
@@ -95,7 +95,7 @@ class AnnotationBasedQueryContext extends AbstractJpaQueryContext {
 
 	@Override
 	protected ContextualQuery createQuery(JpaParametersParameterAccessor accessor) {
-		return new ContextualQuery.StringQuery(queryString);
+		return ContextualQuery.of(queryString);
 	}
 
 	@Override
@@ -106,7 +106,7 @@ class AnnotationBasedQueryContext extends AbstractJpaQueryContext {
 		String queryString = QueryEnhancerFactory.forQuery(declaredQuery) //
 				.applySorting(accessor.getSort(), declaredQuery.getAlias());
 
-		return new ContextualQuery.StringQuery(queryString);
+		return query.alterQuery(queryString);
 	}
 
 	@Override

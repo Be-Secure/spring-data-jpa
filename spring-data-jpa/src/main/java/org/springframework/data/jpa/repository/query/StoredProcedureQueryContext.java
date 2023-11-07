@@ -49,7 +49,7 @@ class StoredProcedureQueryContext extends AbstractJpaQueryContext {
 
 	@Override
 	protected ContextualQuery createQuery(JpaParametersParameterAccessor accessor) {
-		return new ContextualQuery.StringQuery(procedureAttributes.getProcedureName());
+		return ContextualQuery.of(procedureAttributes.getProcedureName());
 	}
 
 	@Override
