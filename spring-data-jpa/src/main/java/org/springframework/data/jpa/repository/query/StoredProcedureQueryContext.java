@@ -23,6 +23,7 @@ import jakarta.persistence.StoredProcedureQuery;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.data.repository.query.Parameter;
 import org.springframework.lang.Nullable;
@@ -41,7 +42,7 @@ class StoredProcedureQueryContext extends AbstractJpaQueryContext {
 
 	public StoredProcedureQueryContext(JpaQueryMethod method, EntityManager entityManager) {
 
-		super(method, entityManager);
+		super(Optional.of(method), entityManager);
 		this.procedureAttributes = method.getProcedureAttributes();
 		this.useNamedParameters = method.getParameters().stream() //
 				.anyMatch(Parameter::isNamedParameter);

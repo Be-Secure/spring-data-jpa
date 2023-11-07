@@ -46,7 +46,7 @@ public class JpaParameters extends Parameters<JpaParameters, JpaParameter> {
 		super(method);
 	}
 
-	private JpaParameters(List<JpaParameter> parameters) {
+	public JpaParameters(List<JpaParameter> parameters) {
 		super(parameters);
 	}
 

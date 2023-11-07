@@ -37,6 +37,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -79,7 +80,7 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 
 	public CustomFinderQueryContext(JpaQueryMethod method, EntityManager entityManager, EscapeCharacter escape) {
 
-		super(method, entityManager);
+		super(Optional.of(method), entityManager);
 
 		this.escape = escape;
 		this.parameters = method.getParameters();
@@ -623,7 +624,7 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 	 * @param returnedType
 	 * @return
 	 */
-	private String entityName(ReturnedType returnedType) {
+	String entityName(ReturnedType returnedType) {
 		return entityName(returnedType.getDomainType());
 	}
 
@@ -633,12 +634,12 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 	 * @param entityType
 	 * @return
 	 */
-	private String entityName(Class<?> entityType) {
+	String entityName(Class<?> entityType) {
 		return entityNameCache.computeIfAbsent(entityType,
 				clazz -> getEntityManager().getMetamodel().entity(clazz).getName());
 	}
 
-	private static String baseEntityName(Class<?> entityType) {
+	static String baseEntityName(Class<?> entityType) {
 		return entityType.getSimpleName();
 	}
 
@@ -648,7 +649,7 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 	 * @param returnedType
 	 * @return
 	 */
-	private String alias(ReturnedType returnedType) {
+	String alias(ReturnedType returnedType) {
 		return alias(returnedType.getDomainType());
 	}
 
@@ -658,7 +659,7 @@ class CustomFinderQueryContext extends AbstractJpaQueryContext {
 	 * @param clazz
 	 * @return
 	 */
-	private static String alias(Class<?> clazz) {
+	static String alias(Class<?> clazz) {
 		return aliasCache.computeIfAbsent(baseEntityName(clazz), entityName -> entityName.substring(0, 1).toLowerCase());
 	}
 

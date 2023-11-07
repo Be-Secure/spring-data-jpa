@@ -56,7 +56,9 @@ import org.springframework.data.jpa.provider.PersistenceProvider;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.query.EscapeCharacter;
 import org.springframework.data.jpa.repository.query.KeysetScrollSpecification;
+import org.springframework.data.jpa.repository.query.QueryByExampleQueryContext;
 import org.springframework.data.jpa.repository.query.QueryUtils;
+import org.springframework.data.jpa.repository.query.SingleEntityExecutor;
 import org.springframework.data.jpa.repository.support.FetchableFluentQueryBySpecification.SpecificationScrollDelegate;
 import org.springframework.data.jpa.repository.support.FluentQuerySupport.ScrollQueryFactory;
 import org.springframework.data.jpa.repository.support.QueryHints.NoHints;
@@ -271,8 +273,7 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 			return;
 		}
 
-		applyAndBind(getQueryString(DELETE_ALL_QUERY_STRING, entityInformation.getEntityName()), entities,
-				entityManager)
+		applyAndBind(getQueryString(DELETE_ALL_QUERY_STRING, entityInformation.getEntityName()), entities, entityManager)
 				.executeUpdate();
 	}
 
@@ -310,7 +311,8 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 		LockModeType type = metadata.getLockModeType();
 		Map<String, Object> hints = getHints();
 
-		return Optional.ofNullable(type == null ? entityManager.find(domainType, id, hints) : entityManager.find(domainType, id, type, hints));
+		return Optional.ofNullable(
+				type == null ? entityManager.find(domainType, id, hints) : entityManager.find(domainType, id, type, hints));
 	}
 
 	@Deprecated
@@ -532,12 +534,22 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 	public <S extends T> Optional<S> findOne(Example<S> example) {
 
 		try {
-			return Optional
-					.of(getQuery(new ExampleSpecification<>(example, escapeCharacter), example.getProbeType(), Sort.unsorted())
-							.setMaxResults(2).getSingleResult());
-		} catch (NoResultException e) {
+			QueryByExampleQueryContext<S> queryContext = new QueryByExampleQueryContext(entityManager, example);
+			queryContext.setExecutor(new SingleEntityExecutor(queryContext));
+			queryContext.registerQueryHints(this::applyQueryHints);
+
+			return Optional.ofNullable((S) queryContext.execute(new Object[] {}));
+		} catch (NoResultException ex) {
 			return Optional.empty();
 		}
+
+		// try {
+		// return Optional
+		// .of(getQuery(new ExampleSpecification<>(example, escapeCharacter), example.getProbeType(), Sort.unsorted())
+		// .setMaxResults(2).getSingleResult());
+		// } catch (NoResultException e) {
+		// return Optional.empty();
+		// }
 	}
 
 	@Override

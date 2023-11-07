@@ -23,6 +23,7 @@ import jakarta.persistence.Tuple;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -59,7 +60,7 @@ class AnnotationBasedQueryContext extends AbstractJpaQueryContext {
 			String countQueryString, QueryMethodEvaluationContextProvider evaluationContextProvider,
 			SpelExpressionParser parser, boolean nativeQuery, QueryRewriter queryRewriter) {
 
-		super(method, entityManager);
+		super(Optional.of(method), entityManager);
 
 		this.bindings = new ArrayList<>();
 
