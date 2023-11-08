@@ -15,6 +15,8 @@
  */
 package org.springframework.data.jpa.repository.query;
 
+import static org.springframework.data.jpa.repository.query.CustomFinderQueryContext.*;
+
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.Attribute.PersistentAttributeType;
 import jakarta.persistence.metamodel.EntityType;
@@ -57,7 +59,7 @@ public class QueryByExampleExpressionBuilder {
 
 	@Nullable
 	public static <T> Predicate getPredicate(EntityType<?> model, Example<T> example) {
-		return getPredicate(new Predicate(""), model, example, EscapeCharacter.DEFAULT);
+		return getPredicate(new Predicate(), model, example, EscapeCharacter.DEFAULT);
 	}
 
 	@Nullable
@@ -68,7 +70,9 @@ public class QueryByExampleExpressionBuilder {
 
 		ExampleMatcher matcher = example.getMatcher();
 
-		List<Predicate> predicates = getPredicates("", root, model, example.getProbe(), example.getProbeType(),
+		String alias = alias(model.getJavaType());
+
+		List<Predicate> predicates = getPredicates("", root, model, alias, example.getProbe(), example.getProbeType(),
 				new ExampleMatcherAccessor(matcher), new PathNode("root", null, example.getProbe()), escapeCharacter);
 
 		if (predicates.isEmpty()) {
@@ -85,16 +89,17 @@ public class QueryByExampleExpressionBuilder {
 	public static class Predicate {
 
 		private final String clause;
+
 		private final List<String> attributes;
 
 		private final List<String> joins;
 
-		public Predicate(String clause) {
-			this(clause, new ArrayList<>(), new ArrayList<>());
+		public Predicate() {
+			this("", new ArrayList<>(), new ArrayList<>());
 		}
 
-		private Predicate(Predicate predicate, String newClause) {
-			this(newClause, predicate.attributes, predicate.joins);
+		public Predicate(String clause) {
+			this(clause, new ArrayList<>(), new ArrayList<>());
 		}
 
 		private Predicate(String clause, List<String> attributes, List<String> joins) {
@@ -104,8 +109,10 @@ public class QueryByExampleExpressionBuilder {
 			this.joins = joins;
 		}
 
-		public String getClause() {
-			return clause;
+		public Predicate attribute(String attribute) {
+
+			attributes.add(attribute);
+			return this;
 		}
 
 		public Predicate join(String name) {
@@ -117,47 +124,94 @@ public class QueryByExampleExpressionBuilder {
 		public Predicate get(SingularAttribute attribute) {
 
 			attributes.add(attribute.getName());
+
+			if (attribute.isAssociation() || attribute.getPersistentAttributeType() == PersistentAttributeType.EMBEDDED) {
+
+				System.out.println(attribute + " is associated with something!");
+				return join(attribute.getName());
+			}
+
 			return this;
 		}
 
 		String getAttribute() {
 			return attributes.isEmpty() ? "" : attributes.get(attributes.size() - 1);
 		}
+
+		public boolean attributeExists(String attribute) {
+			return attributes.contains(attribute);
+		}
+
+		public boolean joinExists(String join) {
+			return joins.contains(join);
+		}
+
+		public String build(String alias) {
+
+			String results = joins.stream() //
+					.map(join -> String.format("left outer join %s.%s as %s", alias, join, join))//
+					.collect(Collectors.joining(" "));
+
+			results += joins.isEmpty() ? "" : " ";
+			results += clause.isEmpty() ? "" : "where " + clause;
+
+			return results;
+		}
+
+		public Predicate clause(String clause) {
+			return new Predicate(clause, attributes, joins);
+		}
+
+		public Predicate wrap(String before, String after) {
+			return clause(before + this.clause + after);
+		}
+
+		public Predicate attributesToClause(String prefix, String suffix) {
+
+			Predicate predicate = new Predicate(prefix + "." + String.join(".", attributes) + suffix, new ArrayList<>(),
+					joins);
+
+			this.attributes.clear();
+
+			return predicate;
+		}
 	}
 
-	private static class AndPredicate extends Predicate {
-		private final List<Predicate> predicates;
+	private static abstract class CompositePredicate extends Predicate {
+
+		CompositePredicate(List<Predicate> predicates, String joiner) {
+
+			super(predicates.stream() //
+					.map(predicate -> predicate.clause) //
+					.collect(Collectors.joining(" " + joiner + " ")));
+
+			predicates.forEach(predicate -> {
+
+				predicate.attributes.forEach(attribute -> {
+					if (!attributeExists(attribute)) {
+						attribute(attribute);
+					}
+				});
+				predicate.joins.forEach(join -> {
+					if (!joinExists(join)) {
+						join(join);
+					}
+				});
+			});
+		}
+	}
+
+	private static class AndPredicate extends CompositePredicate {
 
 		public AndPredicate(List<Predicate> predicates) {
-
-			super("");
-			this.predicates = predicates;
-		}
-
-		@Override
-		public String getClause() {
-
-			return predicates.stream() //
-					.map(predicate -> predicate.getClause()) //
-					.collect(Collectors.joining(" and "));
+			super(predicates, "and");
 		}
 	}
 
-	private static class OrPredicate extends Predicate {
-		private final List<Predicate> predicates;
+	private static class OrPredicate extends CompositePredicate {
 
 		public OrPredicate(List<Predicate> predicates) {
-
-			super("");
-			this.predicates = predicates;
-		}
-
-		@Override
-		public String getClause() {
-
-			return predicates.stream() //
-					.map(predicate -> predicate.getClause()) //
-					.collect(Collectors.joining(" or "));
+			super(predicates, "or");
 		}
 	}
 
@@ -181,7 +235,7 @@ public class QueryByExampleExpressionBuilder {
 		return new OrPredicate(predicates);
 	}
 
-	static List<Predicate> getPredicates(String path, Predicate from, ManagedType<?> type, Object value,
+	static List<Predicate> getPredicates(String path, Predicate from, ManagedType<?> type, String alias, Object value,
 			Class<?> probeType, ExampleMatcherAccessor exampleAccessor, PathNode currentNode,
 			EscapeCharacter escapeCharacter) {
 
@@ -203,7 +257,7 @@ public class QueryByExampleExpressionBuilder {
 			if (!optionalValue.isPresent()) { // TODO: Switch to {@link Optional#isEmpty}
 
 				if (exampleAccessor.getNullHandler().equals(ExampleMatcher.NullHandler.INCLUDE)) {
-					predicates.add(isNull(from.get(attribute)));
+					predicates.add(isNull(alias, from.get(attribute)));
 				}
 				continue;
 			}
@@ -217,8 +271,11 @@ public class QueryByExampleExpressionBuilder {
 			if (attribute.getPersistentAttributeType().equals(PersistentAttributeType.EMBEDDED)
 					|| (isAssociation(attribute))) {
 
-				predicates.addAll(getPredicates(currentPath, from.get(attribute), (ManagedType<?>) attribute.getType(),
-						attributeValue, probeType, exampleAccessor, currentNode, escapeCharacter));
+				List<Predicate> predicates1 = getPredicates(currentPath, from.get(attribute),
+						(ManagedType<?>) attribute.getType(), alias, attributeValue, probeType, exampleAccessor, currentNode,
+						escapeCharacter);
+
+				predicates.addAll(predicates1);
 
 				continue;
 			}
@@ -232,8 +289,9 @@ public class QueryByExampleExpressionBuilder {
 									ClassUtils.getShortName(probeType), node));
 				}
 
-				predicates.addAll(getPredicates(currentPath, from.join(attribute.getName()),
-						(ManagedType<?>) attribute.getType(), attributeValue, probeType, exampleAccessor, node, escapeCharacter));
+				predicates
+						.addAll(getPredicates(currentPath, from.join(attribute.getName()), (ManagedType<?>) attribute.getType(),
+								alias, attributeValue, probeType, exampleAccessor, node, escapeCharacter));
 
 				continue;
 			}
@@ -243,7 +301,7 @@ public class QueryByExampleExpressionBuilder {
 				Predicate predicate = from.get(attribute);
 				if (exampleAccessor.isIgnoreCaseForPath(currentPath)) {
 
-					predicate = lower(predicate);
+					predicate = lower(alias, predicate);
 					attributeValue = attributeValue.toString().toLowerCase();
 				}
 
@@ -251,22 +309,23 @@ public class QueryByExampleExpressionBuilder {
 
 					case DEFAULT:
 					case EXACT:
-						predicates.add(equal(predicate, attributeValue));
+						Predicate equal = equal(alias, predicate, attributeValue);
+						predicates.add(equal);
 						break;
 					case CONTAINING:
-						predicates.add(like( //
+						predicates.add(like(alias, //
 								predicate, //
 								"%" + escapeCharacter.escape(attributeValue.toString()) + "%" //
 						));
 						break;
 					case STARTING:
-						predicates.add(like( //
+						predicates.add(like(alias, //
 								predicate, //
 								escapeCharacter.escape(attributeValue.toString()) + "%" //
 						));
 						break;
 					case ENDING:
-						predicates.add(like( //
+						predicates.add(like(alias, //
 								predicate, //
 								"%" + escapeCharacter.escape(attributeValue.toString()) //
 						));
@@ -276,27 +335,40 @@ public class QueryByExampleExpressionBuilder {
 								"Unsupported StringMatcher " + exampleAccessor.getStringMatcherForPath(currentPath));
 				}
 			} else {
-				predicates.add(equal(from.get(attribute), attributeValue));
+				Predicate equal = equal(alias, from.get(attribute), attributeValue);
+				predicates.add(equal);
 			}
 		}
 
 		return predicates;
 	}
 
-	private static Predicate isNull(Predicate predicate) {
-		return new Predicate(predicate, predicate.getClause() + " IS NULL");
+	private static Predicate isNull(String alias, Predicate predicate) {
+		return predicate.attributesToClause(alias, " IS NULL");
 	}
 
-	private static Predicate equal(Predicate expression, Object attributeValue) {
-		return new Predicate(expression.getAttribute() + " = " + attributeValue);
+	private static Predicate equal(String alias, Predicate predicate, Object attributeValue) {
+
+		if (attributeValue.getClass().equals(String.class)) {
+			return predicate.attributesToClause(alias, " = '" + attributeValue + "'");
+		}
+
+		return predicate.attributesToClause(alias, " = " + attributeValue);
 	}
 
-	private static Predicate like(Predicate predicate, String expression) {
-		return new Predicate(predicate, predicate.getClause() + " like " + expression);
+	private static Predicate like(String alias, Predicate predicate, String expression) {
+
+		String likeExpression = " like '" + expression + "'";
+
+		if (predicate.clause.isEmpty()) {
+			return predicate.attributesToClause(alias, likeExpression);
+		} else {
+			return new Predicate(predicate.clause + likeExpression, new ArrayList<>(), predicate.joins);
+		}
 	}
 
-	private static Predicate lower(Predicate predicate) {
-		return new Predicate(predicate, "lower(" + predicate.getClause() + ")");
+	private static Predicate lower(String alias, Predicate predicate) {
+		return predicate.attributesToClause("lower(" + alias, ")");
 	}
 
 	private static boolean isAssociation(Attribute<?, ?> attribute) {

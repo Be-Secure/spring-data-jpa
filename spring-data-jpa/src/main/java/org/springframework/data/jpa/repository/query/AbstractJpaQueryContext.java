@@ -151,6 +151,10 @@ public abstract class AbstractJpaQueryContext implements QueryContext {
 		return unwrappedResults;
 	}
 
+	final public Object execute() {
+		return execute(new Object[0]);
+	}
+
 	/**
 	 * Every form of a JPA-based query must produce a string-based query.
 	 *

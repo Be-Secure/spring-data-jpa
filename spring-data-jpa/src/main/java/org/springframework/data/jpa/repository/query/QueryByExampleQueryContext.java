@@ -26,6 +26,8 @@ import java.util.function.Consumer;
 
 import org.springframework.data.domain.Example;
 
+import com.mysema.commons.lang.Assert;
+
 public class QueryByExampleQueryContext<T> extends AbstractJpaQueryContext {
 
 	private final Example<T> example;
@@ -36,6 +38,8 @@ public class QueryByExampleQueryContext<T> extends AbstractJpaQueryContext {
 	public QueryByExampleQueryContext(EntityManager entityManager, Example<T> example) {
 
 		super(Optional.empty(), entityManager);
+
+		Assert.notNull(example, "Example must not be null");
 
 		this.example = example;
 		this.predicate = QueryByExampleExpressionBuilder
@@ -54,13 +58,10 @@ public class QueryByExampleQueryContext<T> extends AbstractJpaQueryContext {
 		QueryByExampleExpressionBuilder.Predicate predicate = QueryByExampleExpressionBuilder.getPredicate(model, example);
 
 		if (predicate != null) {
-
-			String predicates = predicate.getClause();
-
-			if (!predicates.isEmpty()) {
-				query += " where " + predicates;
-			}
+			query += " " + predicate.build(alias);
 		}
+
+		System.out.println(query);
 
 		return ContextualQuery.of(query);
 	}

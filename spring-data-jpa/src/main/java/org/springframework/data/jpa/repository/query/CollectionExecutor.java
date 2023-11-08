@@ -7,7 +7,7 @@ import java.util.Collection;
 /**
  * Execute a JPA query for a Java {@link Collection}-returning repository method.
  */
-class CollectionExecutor extends JpaQueryContextExecutor {
+public class CollectionExecutor extends JpaQueryContextExecutor {
 
     public CollectionExecutor(AbstractJpaQueryContext queryContext) {
         super(queryContext);

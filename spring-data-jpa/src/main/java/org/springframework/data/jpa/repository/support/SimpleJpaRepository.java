@@ -54,6 +54,7 @@ import org.springframework.data.jpa.convert.QueryByExamplePredicateBuilder;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.provider.PersistenceProvider;
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.query.CollectionExecutor;
 import org.springframework.data.jpa.repository.query.EscapeCharacter;
 import org.springframework.data.jpa.repository.query.KeysetScrollSpecification;
 import org.springframework.data.jpa.repository.query.QueryByExampleQueryContext;
@@ -538,7 +539,7 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 			queryContext.setExecutor(new SingleEntityExecutor(queryContext));
 			queryContext.registerQueryHints(this::applyQueryHints);
 
-			return Optional.ofNullable((S) queryContext.execute(new Object[] {}));
+			return Optional.ofNullable((S) queryContext.execute());
 		} catch (NoResultException ex) {
 			return Optional.empty();
 		}
@@ -574,8 +575,15 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 
 	@Override
 	public <S extends T> List<S> findAll(Example<S> example) {
-		return getQuery(new ExampleSpecification<>(example, escapeCharacter), example.getProbeType(), Sort.unsorted())
-				.getResultList();
+
+		QueryByExampleQueryContext<S> queryContext = new QueryByExampleQueryContext(entityManager, example);
+		queryContext.setExecutor(new CollectionExecutor(queryContext));
+		queryContext.registerQueryHints(this::applyQueryHints);
+
+		return (List<S>) queryContext.execute();
+
+		// return getQuery(new ExampleSpecification<>(example, escapeCharacter), example.getProbeType(), Sort.unsorted())
+		// .getResultList();
 	}
 
 	@Override
